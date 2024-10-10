@@ -1,5 +1,6 @@
 import pygame
 
+import input_handler
 import renderer
 from Chess.board import Board
 
@@ -8,7 +9,7 @@ class Game:
         self.board = Board()
     
     def handle_input(self, pygame_events):
-        return
+        input_handler.handle_input(pygame_events)
     
     def update(self):
         return
