@@ -1,7 +1,5 @@
 import pygame
 
-CHESS_BOARD_POSITION = (400, 50)
-
 chess_board = pygame.image.load("./src/UI/images/chess_board.png")
 
 white_pawn = pygame.image.load("./src/UI/images/white_pawn.png")
@@ -18,16 +16,65 @@ black_rook = pygame.image.load("./src/UI/images/black_rook.png")
 black_queen = pygame.image.load("./src/UI/images/black_queen.png")
 black_king = pygame.image.load("./src/UI/images/black_king.png")
 
-def render(screen, board):
-    screen.blit(chess_board, CHESS_BOARD_POSITION)
+move_overlay = pygame.image.load("./src/UI/images/move_overlay.png")
 
-    for position in range(64):
-        render_position = (CHESS_BOARD_POSITION[0] + 100 * (position % 8), CHESS_BOARD_POSITION[1] + 100 * (position // 8))
-        piece_image = get_piece_image(position, board)
+class BoardUI():
+    def __init__(self, position):
+        self.chess_board_position = position
+        self.selected_piece = -1
+    
+    def render(self, screen, board):
+        screen.blit(chess_board, self.chess_board_position)
 
-        if not piece_image: continue
+        for position in range(64):
+            # Piece being dragged is rendered on top of other pieces
+            if position == self.selected_piece:
+                continue
 
-        screen.blit(piece_image, render_position)
+            if self.selected_piece >= 0:
+                for move in self.legal_moves:
+                    if move.end_bitboard_position == board.get_bitboard_position_from_index(position):
+                        screen.blit(move_overlay, self.get_screen_position_from_square(position))
+                        break
+
+            piece_image = get_piece_image(position, board)
+
+            if not piece_image: continue
+                
+            render_position = self.get_screen_position_from_square(position)
+
+            screen.blit(piece_image, render_position)
+        
+        if self.selected_piece != -1:
+            piece_image = get_piece_image(self.selected_piece, board)
+            render_position = pygame.mouse.get_pos() - pygame.Vector2(50, 50)
+            
+            screen.blit(piece_image, render_position)
+    
+    # Check if a position on the window is a square on the board
+    def get_square_from_screen_position(self, position):
+        if position[0] < self.chess_board_position[0] or position[0] > self.chess_board_position[0] + 800:
+            return -1
+        if position[1] < self.chess_board_position[1] or position[1] > self.chess_board_position[1] + 800:
+            return -1
+        
+        square_x = (position[0] - self.chess_board_position[0]) // 100
+        square_y = (position[1] - self.chess_board_position[1]) // 100
+
+        return square_y * 8 + square_x
+    
+    def get_screen_position_from_square(self, position):
+        screen_x = self.chess_board_position[0] + 100 * (position % 8)
+        screen_y = self.chess_board_position[1] + 100 * (position // 8)
+
+        return (screen_x, screen_y)
+    
+    def set_selected_piece(self, square, board):
+        self.selected_piece = square
+        if square == -1:
+            self.legal_moves = []
+            return
+        self.legal_moves = board.get_piece_legal_moves(board.get_bitboard_position_from_index(self.selected_piece))
 
 def get_piece_image(position, board):
     bitboard_position = board.get_bitboard_position_from_index(position)
