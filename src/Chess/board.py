@@ -213,25 +213,25 @@ class Board:
         if self.is_pawn(move.start_bitboard_position) and (move.start_bitboard_position << 16 == move.end_bitboard_position or move.start_bitboard_position >> 16 == move.end_bitboard_position):
             self.is_en_passant_target = True
                 
-            if self.is_white(move.start_bitboard_position):
+            if move.is_white_move:
                 self.en_passant_target = move.start_bitboard_position >> 8
             else:
                 self.en_passant_target = move.start_bitboard_position << 8
 
         # Check if king to disallow castling
-        elif move.start_bitboard_position == 2**60:
+        elif move.start_bitboard_position == 0b1000000000000000000000000000000000000000000000000000000000000:
             self.white_can_kingside_castle = False
             self.white_can_queenside_castle = False
-        elif move.start_bitboard_position == 2**4:
+        elif move.start_bitboard_position == 0b10000:
             self.black_can_kingside_castle = False
             self.black_can_queenside_castle = False
         
         # Check if rook to disallow castling
-        elif (move.start_bitboard_position | move.end_bitboard_position) & 2**63 > 0:
+        elif (move.start_bitboard_position | move.end_bitboard_position) & 1000000000000000000000000000000000000000000000000000000000000000 > 0:
             self.white_can_kingside_castle = False
-        elif (move.start_bitboard_position | move.end_bitboard_position) & 2**56 > 0:
+        elif (move.start_bitboard_position | move.end_bitboard_position) & 100000000000000000000000000000000000000000000000000000000 > 0:
             self.white_can_queenside_castle = False
-        elif (move.start_bitboard_position | move.end_bitboard_position) & 2**7 > 0:
+        elif (move.start_bitboard_position | move.end_bitboard_position) & 0b10000000 > 0:
             self.black_can_kingside_castle = False
         elif (move.start_bitboard_position | move.end_bitboard_position) & 0b1 > 0:
             self.black_can_queenside_castle = False
@@ -261,6 +261,8 @@ class Board:
                 self.update_piece_position(0b1, 0b1000)
 
         self.update_attack_tables(move)
+
+        #print(f"{[int(math.log2(i)) for i in self.pinning_pieces]} pinning {[int(math.log2(i)) for i in self.pinned_piece_moves]}")
 
         self.white_move = not self.white_move
     
@@ -299,7 +301,9 @@ class Board:
         if move.is_en_passant:
             self.undo_en_passant(move)
         
-        self.generate_attack_tables()
+        self.update_attack_tables(move)
+
+        #print(f"{[int(math.log2(i)) for i in self.pinning_pieces]} pinning {[int(math.log2(i)) for i in self.pinned_piece_moves]}")
 
         self.white_move = not self.white_move
 
@@ -387,17 +391,21 @@ class Board:
 
     def get_legal_moves(self):
         moves = []
-        for i in range(64):
-            if 2**i & (self.white_pieces if self.white_move else self.black_pieces):
-                moves += self.get_piece_legal_moves(2**i)
-        
+
+        pieces = self.bitboard_to_bitboard_positions(self.white_pieces if self.white_move else self.black_pieces)
+
+        for piece in pieces:
+            moves += self.get_piece_legal_moves(piece[0], piece[1])
+
         return moves
 
-    def get_piece_legal_moves(self, bitboard_position):
+    def get_piece_legal_moves(self, position, bitboard_position):
         if self.is_pawn(bitboard_position):
-            moves_bitboard = self.get_pawn_legal_moves(bitboard_position)
+            moves_bitboard = self.get_pawn_legal_moves(position, bitboard_position)
+
         elif self.is_king(bitboard_position):
             moves_bitboard = self.get_king_legal_moves(bitboard_position)
+
         else:
             attacks = self.attack_tables[bitboard_position]
 
@@ -417,26 +425,23 @@ class Board:
                         moves_bitboard &= self.moves_blocking_black_check
             
             if self.is_pinned(bitboard_position):
-                moves_bitboard &= self.pinned_piece_moves[bitboard_position]
+                moves_bitboard &= (self.pinned_piece_moves[bitboard_position] | list(self.pinning_pieces.keys())[list(self.pinning_pieces.values()).index(bitboard_position)])
             
         
         moves = []
-        for i in range(64):
-            if moves_bitboard & 2**i > 0:
-                if self.is_pawn(bitboard_position) and ((self.is_white(bitboard_position) and 0 <= i <= 7) or (self.is_black(bitboard_position) and 56 <= i <= 63)):
-                    for promotion in range(1, 5):
-                        move = Move(bitboard_position, 2**i, self, promotion)
-                        moves.append(move)
-                else:
-                    move = Move(bitboard_position, 2**i, self)
-                    moves.append(move)
+
+        for move in self.bitboard_to_bitboard_positions(moves_bitboard):
+            if self.is_pawn(bitboard_position) and ((self.is_white(bitboard_position) and 0 <= move[0] <= 7) or (self.is_black(bitboard_position) and 56 <= move[0] <= 63)):
+                for promotion in range(1, 5):
+                    moves.append(Move(bitboard_position, move[1], self, promotion))
+            else:
+                moves.append(Move(bitboard_position, move[1], self))
         
         return moves
     
-    def get_pawn_legal_moves(self, bitboard_position):
-        index_position = int(math.log2(bitboard_position))
+    def get_pawn_legal_moves(self, position, bitboard_position):
         if self.is_white(bitboard_position):
-            moves = ((((bitboard_position >> 7) if DISTANCE_TO_EDGE[index_position][0] > 0 else 0) | ((bitboard_position >> 9) if DISTANCE_TO_EDGE[index_position][1] > 0 else 0)) & (self.black_pieces | self.en_passant_target)
+            moves = ((((bitboard_position >> 7) if DISTANCE_TO_EDGE[position][0] > 0 else 0) | ((bitboard_position >> 9) if DISTANCE_TO_EDGE[position][1] > 0 else 0)) & (self.black_pieces | self.en_passant_target)
                      | bitboard_position >> 8 & ~(self.white_pieces | self.black_pieces))
             
             # Allow Two Squares If First Move
@@ -448,10 +453,8 @@ class Board:
                     moves &= self.moves_blocking_white_check | self.pieces_attacking_white_king[0]
                 else:
                     moves &= self.moves_blocking_white_check
-            if self.is_pinned(bitboard_position):
-                moves &= self.pinned_piece_moves[bitboard_position]
         else:
-            moves = ((((bitboard_position << 7) if DISTANCE_TO_EDGE[index_position][1] > 0 else 0) | ((bitboard_position << 9) if DISTANCE_TO_EDGE[index_position][0] > 0 else 0)) & (self.white_pieces | self.en_passant_target)
+            moves = ((((bitboard_position << 7) if DISTANCE_TO_EDGE[position][1] > 0 else 0) | ((bitboard_position << 9) if DISTANCE_TO_EDGE[position][0] > 0 else 0)) & (self.white_pieces | self.en_passant_target)
                      | bitboard_position << 8 & ~(self.white_pieces | self.black_pieces))
             
             # Allow Two Squares If First Move
@@ -463,8 +466,9 @@ class Board:
                     moves &= self.moves_blocking_black_check | self.pieces_attacking_black_king[0]
                 else:
                     moves &= self.moves_blocking_black_check
-            if self.is_pinned(bitboard_position):
-                moves &= self.pinned_piece_moves[bitboard_position]
+
+        if self.is_pinned(bitboard_position):
+            moves &= (self.pinned_piece_moves[bitboard_position] | list(self.pinning_pieces.keys())[list(self.pinning_pieces.values()).index(bitboard_position)])
         
         return moves
 
@@ -507,6 +511,57 @@ class Board:
 
             self.update_piece_attack_table(position, bitboard_position)
     
+    def update_attack_tables(self, move):
+        self.moves_blocking_white_check = 2**64 - 1
+        self.moves_blocking_black_check = 2**64 - 1
+        self.pieces_attacking_white_king = []
+        self.pieces_attacking_black_king = []
+
+        if move.start_bitboard_position in self.pinning_pieces:
+            self.pinned_piece_moves.pop(self.pinning_pieces.pop(move.start_bitboard_position))
+        elif move.end_bitboard_position in self.pinning_pieces:
+            self.pinned_piece_moves.pop(self.pinning_pieces.pop(move.end_bitboard_position))
+        if move.start_bitboard_position in self.pinned_piece_moves:
+            self.pinned_piece_moves.pop(self.pinning_pieces.pop(list(self.pinning_pieces.keys())[list(self.pinning_pieces.values()).index(move.start_bitboard_position)]))
+        elif move.end_bitboard_position in self.pinned_piece_moves:
+            self.pinned_piece_moves.pop(self.pinning_pieces.pop(list(self.pinning_pieces.keys())[list(self.pinning_pieces.values()).index(move.end_bitboard_position)]))
+
+        self.update_piece_attack_table(int(math.log2(move.start_bitboard_position)), move.start_bitboard_position)
+        self.update_piece_attack_table(int(math.log2(move.end_bitboard_position)), move.end_bitboard_position)
+
+        if move.is_kingside_castle:
+            if move.is_white_move:
+                self.attack_tables[2**63] = 0
+                self.update_piece_attack_table(61, 2**61)
+            else:
+                self.attack_tables[0b10000000] = 0
+                self.update_piece_attack_table(5, 0b100000)
+        elif move.is_queenside_castle:
+            if move.is_white_move:
+                self.attack_tables[2**56] = 0
+                self.update_piece_attack_table(59, 2**59)
+            else:
+                self.attack_tables[0b1] = 0
+                self.update_piece_attack_table(3, 0b1000)
+
+        if self.kings & (move.start_bitboard_position | move.end_bitboard_position) > 0:
+            if self.is_white(self.kings & (move.start_bitboard_position | move.end_bitboard_position)):
+                enemy_sliding_pieces = self.black_pieces & (self.bishops | self.rooks | self.queens)
+            else:
+                enemy_sliding_pieces = self.white_pieces & (self.bishops | self.rooks | self.queens)
+
+            for piece in self.bitboard_to_bitboard_positions(enemy_sliding_pieces):
+                if piece[1] in self.pinning_pieces:
+                    self.pinned_piece_moves.pop(self.pinning_pieces.pop(piece[1]))
+                self.update_piece_attack_table(piece[0], piece[1])
+
+        for piece in self.bitboard_to_bitboard_positions(self.bishops | self.rooks | self.queens):
+            if self.attack_tables[piece[1]] & (move.start_bitboard_position | move.end_bitboard_position) == 0:
+                continue
+            if piece[1] & (move.start_bitboard_position | move.end_bitboard_position) > 0:
+                continue
+            self.update_piece_attack_table(piece[0], piece[1])
+
     def update_piece_attack_table(self, position, bitboard_position):
         self.attack_tables[bitboard_position] = 0
 
@@ -525,61 +580,6 @@ class Board:
             self.update_sliding_piece_attack_table(position, bitboard_position, 0, 8)
         else:
             self.update_king_attack_table(position, bitboard_position)
-    
-    def update_attack_tables(self, move):
-        self.moves_blocking_white_check = 2**64 - 1
-        self.moves_blocking_black_check = 2**64 - 1
-        self.pieces_attacking_white_king = []
-        self.pieces_attacking_black_king = []
-
-        if move.end_bitboard_position in self.pinning_pieces:
-            self.pinned_piece_moves.pop(self.pinning_pieces.pop(move.end_bitboard_position))
-        elif move.start_bitboard_position in self.pinning_pieces:
-            self.pinned_piece_moves.pop(self.pinning_pieces.pop(move.start_bitboard_position))
-        
-        for pinning_piece, pinned_piece in [i for i in self.pinning_pieces.items()]:
-            if move.end_bitboard_position & self.pinned_piece_moves[pinned_piece] > 0:
-                self.pinned_piece_moves.pop(self.pinning_pieces.pop(pinning_piece))
-
-        self.attack_tables[move.start_bitboard_position] = 0
-        self.update_piece_attack_table(int(math.log2(move.end_bitboard_position)), move.end_bitboard_position)
-
-        if move.is_kingside_castle:
-            if move.is_white_move:
-                self.attack_tables[2**63] = 0
-                self.update_piece_attack_table(61, 2**61)
-            else:
-                self.attack_tables[0b10000000] = 0
-                self.update_piece_attack_table(5, 0b100000)
-        elif move.is_queenside_castle:
-            if move.is_white_move:
-                self.attack_tables[2**56] = 0
-                self.update_piece_attack_table(59, 2**59)
-            else:
-                self.attack_tables[0b1] = 0
-                self.update_piece_attack_table(3, 0b1000)
-
-        if self.is_king(move.end_bitboard_position):
-            if self.is_white(move.end_bitboard_position):
-                enemy_sliding_pieces = self.black_pieces & (self.bishops | self.rooks | self.queens)
-            else:
-                enemy_sliding_pieces = self.white_pieces & (self.bishops | self.rooks | self.queens)
-
-            for i in range(64):
-                looping_bitboard_position = 2**i
-                if looping_bitboard_position & enemy_sliding_pieces:
-                    if looping_bitboard_position in self.pinning_pieces:
-                        self.pinned_piece_moves.pop(self.pinning_pieces.pop(looping_bitboard_position))
-                    self.update_piece_attack_table(int(math.log2(looping_bitboard_position)), looping_bitboard_position)
-
-        for i in range(64):
-            bitboard_position = 2**i
-            if bitboard_position & move.end_bitboard_position > 0:
-                continue
-            if bitboard_position & (self.bishops | self.rooks | self.queens) == 0:
-                continue
-            if self.attack_tables[bitboard_position] & (move.start_bitboard_position | move.end_bitboard_position):
-                self.update_piece_attack_table(i, bitboard_position)
     
     def update_pawn_attack_table(self, position, bitboard_position):
         if self.is_white(bitboard_position):
@@ -650,6 +650,7 @@ class Board:
                         self.pieces_attacking_white_king.append(bitboard_position)
                     else:
                         break # Same colour, so can't move through them
+
                 elif self.is_piece(target_bitboard_position):
                     if self.is_white(target_bitboard_position) != self.is_white(bitboard_position):
                         self.check_pinned(target_bitboard_position, direction_offset_index, bitboard_position)
@@ -685,34 +686,42 @@ class Board:
                         else:
                             target_pinned_piece_move = bitboard_position << -(direction_offset * (j+1))
                         
-                        pinned_pieces_moves |= target_pinned_piece_move
-                        
                         if self.is_piece(target_pinned_piece_move):
                             break
+
+                        pinned_pieces_moves |= target_pinned_piece_move
+
+                    if pinning_piece_bitboard_position in self.pinning_pieces:
+                        self.pinned_piece_moves.pop(self.pinning_pieces.pop(pinning_piece_bitboard_position))
+                    if bitboard_position in self.pinned_piece_moves:
+                        self.pinned_piece_moves.pop(self.pinning_pieces.pop(list(self.pinning_pieces.keys())[list(self.pinning_pieces.values()).index(bitboard_position)]))
 
                     self.pinned_piece_moves[bitboard_position] = pinned_pieces_moves
                     self.pinning_pieces[pinning_piece_bitboard_position] = bitboard_position
                 return
-            if self.is_piece(target_bitboard_position):
-                return
 
     def is_pinned(self, bitboard_position):
-        return bitboard_position in self.pinned_piece_moves 
+        return bitboard_position in self.pinned_piece_moves and self.pinned_piece_moves[bitboard_position] & (self.white_pieces | self.black_pieces) == 0
+
+    def bitboard_to_bitboard_positions(self, bitboard):
+        bitboard_string = bin(bitboard)[:1:-1]
+        i = bitboard_string.find('1')
+        while i != -1:
+            yield (i, 2**i)
+            i = bitboard_string.find('1', i+1)
 
     @property
     def white_pieces_attack_table(self):
         attacks = 0
-        for i in range(64):
-            if 2**i & self.white_pieces > 0:
-                attacks |= self.attack_tables[2**i]
+        for piece in self.bitboard_to_bitboard_positions(self.white_pieces):
+            attacks |= self.attack_tables[piece[1]]
         return attacks
     
     @property
     def black_pieces_attack_table(self):
         attacks = 0
-        for i in range(64):
-            if 2**i & self.black_pieces > 0:
-                attacks |= self.attack_tables[2**i]
+        for piece in self.bitboard_to_bitboard_positions(self.black_pieces):
+            attacks |= self.attack_tables[piece[1]]
         return attacks
     
     @property

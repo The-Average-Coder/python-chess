@@ -60,6 +60,20 @@ class Move:
         return self.move_data & 0b000111000000 == pieces.KING << 6
     
     @property
+    def capture_value(self):
+        if self.captured_pawn:
+            return 100
+        if self.captured_knight:
+            return 300
+        if self.captured_bishop:
+            return 330
+        if self.captured_rook:
+            return 500
+        if self.captured_queen:
+            return 900
+        return 0
+    
+    @property
     def is_kingside_castle(self):
         return self.move_data & 0b100000 > 0
     

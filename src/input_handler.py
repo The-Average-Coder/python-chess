@@ -11,7 +11,7 @@ class InputHandler:
     def handle_input(self, pygame_events, renderer, board):
         legal_moves = board.get_legal_moves()
         if len(legal_moves) > 0 and not board.white_move:
-            chess_bot.make_move(board, 3)
+            chess_bot.make_move(board, 4)
 
         for event in pygame_events:
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -49,7 +49,7 @@ class InputHandler:
         end_bitboard_position = board.get_bitboard_position_from_index(end_position)
 
         move = None
-        legal_moves = board.get_piece_legal_moves(start_bitboard_position)
+        legal_moves = board.get_piece_legal_moves(start_position, start_bitboard_position)
 
         for legal_move in legal_moves:
             if legal_move.end_bitboard_position == end_bitboard_position:
@@ -72,4 +72,5 @@ class InputHandler:
         if len(board.moves) == 0:
             return
         
+        board.undo_move(board.moves.pop(-1))
         board.undo_move(board.moves.pop(-1))

@@ -74,7 +74,7 @@ class BoardUI():
         if square == -1:
             self.legal_moves = []
             return
-        self.legal_moves = board.get_piece_legal_moves(board.get_bitboard_position_from_index(self.selected_piece))
+        self.legal_moves = board.get_piece_legal_moves(self.selected_piece, board.get_bitboard_position_from_index(self.selected_piece))
 
 def get_piece_image(position, board):
     bitboard_position = board.get_bitboard_position_from_index(position)
