@@ -73,4 +73,6 @@ class InputHandler:
             return
         
         board.undo_move(board.moves.pop(-1))
-        board.undo_move(board.moves.pop(-1))
+        
+        if len(board.moves) % 2 == 1:
+            board.undo_move(board.moves.pop(-1))

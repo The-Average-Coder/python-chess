@@ -17,6 +17,7 @@ black_queen = pygame.image.load("./src/UI/images/black_queen.png")
 black_king = pygame.image.load("./src/UI/images/black_king.png")
 
 move_overlay = pygame.image.load("./src/UI/images/move_overlay.png")
+previous_move_overlay = pygame.image.load("./src/UI/images/previous_move_overlay.png")
 
 class BoardUI():
     def __init__(self, position):
@@ -26,7 +27,13 @@ class BoardUI():
     def render(self, screen, board):
         screen.blit(chess_board, self.chess_board_position)
 
+        last_move = board.moves[-1] if len(board.moves) > 0 else None
+
         for position in range(64):
+            if last_move:
+                if 2**position & (last_move.start_bitboard_position | last_move.end_bitboard_position):
+                    screen.blit(previous_move_overlay, self.get_screen_position_from_square(position))
+
             # Piece being dragged is rendered on top of other pieces
             if position == self.selected_piece:
                 continue

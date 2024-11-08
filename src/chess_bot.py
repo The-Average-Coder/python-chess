@@ -1,3 +1,6 @@
+import math, random
+from Chess import openings_dictionary, pieces
+
 PAWN_VALUE = 100
 KNIGHT_VALUE = 300
 BISHOP_VALUE = 330
@@ -70,19 +73,51 @@ KING_ENDGAME_WEIGHTS = [
     -5, -3, -3, -3, -3, -3, -3, -5
 ]
 
+is_opening_theory = True
+current_line = openings_dictionary.openings
+
 def make_move(board, depth):
-    _, move = search(board, depth, -1_000_000_000, 1_000_000_000)
+    move = None
+
+    if is_opening_theory:
+        move = get_book_move(board)
+    
+    if move is None:
+        _, move = search(board, depth, -1_000_000_000, 1_000_000_000)
+    
     board.make_move(move)
     board.moves.append(move)
 
+def get_book_move(board):
+    global is_opening_theory
+    global current_line
+
+    if len(board.moves) > 0:
+        previous_move_square = move_to_square(board.moves[-1], board)
+        if previous_move_square not in current_line:
+            is_opening_theory = False
+            return None
+        current_line = current_line[previous_move_square]
+        if len(current_line) == 0:
+            is_opening_theory = False
+            return None
+        end_square = random.choice(list(current_line.keys()))
+        current_line = current_line[end_square]
+    else:
+        end_square = random.choices(list(current_line.keys()), weights=[3, 1], k=1)[0]
+        current_line = current_line[end_square]
+
+    return square_to_move(end_square, board)
+
 def search(board, depth, alpha, beta):
+
     if depth == 0:
         return search_captures(board, alpha, beta)
 
     legal_moves = board.get_legal_moves()
 
     if len(legal_moves) == 0:
-        if board.white_in_check and board.white_move or board.black_in_check and not board.white_move:
+        if board.white_in_check or board.black_in_check:
             return -1_000_000_000, None
         else:
             return 0, None
@@ -113,7 +148,7 @@ def search_captures(board, alpha, beta):
     legal_moves = board.get_legal_moves()
 
     if len(legal_moves) == 0:
-        if board.white_in_check and board.white_move or board.black_in_check and not board.white_move:
+        if board.white_in_check or board.black_in_check:
             return -1_000_000_000, None
         else:
             return 0, None
@@ -163,7 +198,7 @@ def evaluate(board):
             elif board.is_queen(bitboard_position):
                 evaluation += QUEEN_WEIGHTS[i] * 10
             elif board.is_king(bitboard_position):
-                if len([i for i in board.bitboard_to_bitboard_positions(board.black_pieces & (board.knights | board.bishops | board.rooks | board.queens))]) > 3:
+                if len([j for j in board.bitboard_to_bitboard_positions(board.black_pieces & (board.knights | board.bishops | board.rooks | board.queens))]) > 3:
                     evaluation += KING_EARLY_WEIGHTS[i] * 10
                 else:
                     evaluation += KING_ENDGAME_WEIGHTS[i] * 10
@@ -173,11 +208,11 @@ def evaluate(board):
             elif board.is_knight(bitboard_position):
                 evaluation -= KNIGHT_WEIGHTS[i] * 10
             elif board.is_bishop(bitboard_position):
-                evaluation -= BISHOP_WEIGHTS[i] * 10
+                evaluation -= BISHOP_WEIGHTS[63-i] * 10
             elif board.is_queen(bitboard_position):
                 evaluation -= QUEEN_WEIGHTS[i] * 10
             elif board.is_king(bitboard_position):
-                if len([i for i in board.bitboard_to_bitboard_positions(board.white_pieces & (board.knights | board.bishops | board.rooks | board.queens))]) > 3:
+                if len([j for j in board.bitboard_to_bitboard_positions(board.white_pieces & (board.knights | board.bishops | board.rooks | board.queens))]) > 3:
                     evaluation += KING_EARLY_WEIGHTS[63-i] * 10
                 else:
                     evaluation += KING_ENDGAME_WEIGHTS[63-i] * 10
@@ -185,3 +220,46 @@ def evaluate(board):
     if not board.white_move: evaluation *= -1
 
     return evaluation
+
+def bitboard_position_to_human_position(bitboard_position):
+    index_position = int(math.log2(bitboard_position))
+    file = 'abcdefgh'[index_position % 8]
+    rank = str((63 - index_position) // 8 + 1)
+    return file + rank
+
+def human_position_to_bitboard_position(square):
+    file = 'abcdefgh'.index(square[0])
+    rank = 8 - int(square[1])
+    return 1 << rank * 8 + file
+
+def get_piece_letter(piece_type):
+    if piece_type == pieces.PAWN: return ''
+    if piece_type == pieces.KNIGHT: return 'N'
+    if piece_type == pieces.BISHOP: return 'B'
+    if piece_type == pieces.ROOK: return 'R'
+    if piece_type == pieces.QUEEN: return 'Q'
+    if piece_type == pieces.KING: return 'K'
+
+def move_to_square(move, board):
+    end_square = bitboard_position_to_human_position(move.end_bitboard_position)
+    piece_type = board.get_piece_type(move.end_bitboard_position)
+    capture_info = ''
+    if move.is_capture:
+        if board.is_pawn(move.end_bitboard_position):
+            capture_info += bitboard_position_to_human_position(move.start_bitboard_position)[0]
+        capture_info += 'x'
+    return get_piece_letter(piece_type) + capture_info + end_square
+
+def square_to_move(square, board):
+    end_bitboard_position = human_position_to_bitboard_position(square[-2] + square[-1])
+    legal_moves = board.get_legal_moves()
+    for move in legal_moves:
+        if move.end_bitboard_position == end_bitboard_position:
+            piece_letter = get_piece_letter(board.get_piece_type(move.start_bitboard_position))
+            if len(square) == 2 and piece_letter == '':
+                return move
+            if square[0] == piece_letter:
+                return move
+            
+    return None
+            

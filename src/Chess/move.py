@@ -7,18 +7,18 @@ class Move:
 
         self.move_data = 0
         if board.is_white(start_bitboard_position):
-            self.move_data += 0b100000000000
+            self.move_data |= 0b100000000000
 
-        self.move_data += board.check_capture(end_bitboard_position) << 6
+        self.move_data |= board.check_capture(end_bitboard_position) << 6
 
         if board.check_kingside_castle(start_bitboard_position, end_bitboard_position):
-            self.move_data += 0b100000
+            self.move_data |= 0b100000
         elif board.check_queenside_castle(start_bitboard_position, end_bitboard_position):
-            self.move_data += 0b10000
+            self.move_data |= 0b10000
         elif board.check_en_passant(start_bitboard_position, end_bitboard_position):
-            self.move_data += 0b1
+            self.move_data |= 0b1
         else:
-            self.move_data += promotion << 1
+            self.move_data |= promotion << 1
         
         self.previous_castling_rules = board.castling_rules
         self.previous_en_passant_target = board.en_passant_target

@@ -16,7 +16,7 @@ def search(board: Board, depth):
         board.make_move(move)
         new_positions = search(board, depth-1)
         num_positions += new_positions
-        #if depth == 3:
+        #if depth == 2:
         #    print(f"{bitboard_position_to_human_position(move.start_bitboard_position)}{bitboard_position_to_human_position(move.end_bitboard_position)}: {new_positions}")
         board.undo_move(move)
     

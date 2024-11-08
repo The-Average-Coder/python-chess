@@ -1,4 +1,4 @@
-import string, math
+import string, math, random
 
 from Chess import pieces
 from Chess.move import Move 
@@ -8,6 +8,9 @@ from Chess.king_moves import KING_MOVES
 
 STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 #STARTING_FEN = 'rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8'
+#STARTING_FEN = 'r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 '
+
+#STARTING_FEN = '6QR/8/3p1kN1/1P5P/3N1r2/1b4P1/3r4/2K2b2 b - - 13 10'
 
 SLIDING_PIECE_DIRECTION_OFFSETS = [ 1, -1, 8, -8, 7, -7, 9, -9 ]
 
@@ -71,12 +74,13 @@ class Board:
         self.moves = []
 
         self.generate_attack_tables()
+        #self.generate_zobrist_key()
 
     def fen_is_valid(self, FEN):
         return True
     
     def get_bitboard_position_from_index(self, index: int):
-        return 2**index
+        return 0b1 << index
 
     @property
     def white_move(self):
@@ -172,29 +176,6 @@ class Board:
         return self.queens & bitboard_position > 0
     def is_king(self, bitboard_position):
         return self.kings & bitboard_position > 0
-    
-    def is_move_legal(self, start_bitboard_position, end_bitboard_position):
-        if self.is_white(start_bitboard_position) and self.is_white(end_bitboard_position):
-            return False
-        if self.is_black(start_bitboard_position) and self.is_black(end_bitboard_position):
-            return False
-        if self.is_pawn(start_bitboard_position):
-            if self.is_white(start_bitboard_position):
-                if start_bitboard_position >> 8 == end_bitboard_position and self.is_piece(end_bitboard_position):
-                    return False
-                if start_bitboard_position >> 16 == end_bitboard_position and (self.is_piece(end_bitboard_position) or self.is_piece(start_bitboard_position >> 8)):
-                    return False
-                if (start_bitboard_position >> 7 == end_bitboard_position or start_bitboard_position >> 9 == end_bitboard_position) and not (self.is_black(end_bitboard_position) or end_bitboard_position == self.en_passant_target):
-                    return False
-            if self.is_black(start_bitboard_position):
-                if start_bitboard_position << 8 == end_bitboard_position and self.is_piece(end_bitboard_position):
-                    return False
-                if start_bitboard_position << 16 == end_bitboard_position and (self.is_piece(end_bitboard_position) or self.is_piece(start_bitboard_position << 8)):
-                    return False
-                if (start_bitboard_position << 7 == end_bitboard_position or start_bitboard_position << 9 == end_bitboard_position) and not self.is_piece(end_bitboard_position):
-                    return False
-        
-        return True
 
     def make_move(self, move):
         if move.is_capture:
@@ -262,8 +243,6 @@ class Board:
 
         self.update_attack_tables(move)
 
-        #print(f"{[int(math.log2(i)) for i in self.pinning_pieces]} pinning {[int(math.log2(i)) for i in self.pinned_piece_moves]}")
-
         self.white_move = not self.white_move
     
     def undo_move(self, move):
@@ -303,8 +282,6 @@ class Board:
         
         self.update_attack_tables(move)
 
-        #print(f"{[int(math.log2(i)) for i in self.pinning_pieces]} pinning {[int(math.log2(i)) for i in self.pinned_piece_moves]}")
-
         self.white_move = not self.white_move
 
     def update_piece_position(self, start_bitboard_position, end_bitboard_position):
@@ -320,6 +297,14 @@ class Board:
         elif self.is_queen(start_bitboard_position): self.queens += position_change
         elif self.is_king(start_bitboard_position): self.kings += position_change
 
+    def get_piece_type(self, bitboard_position):
+        if self.is_pawn(bitboard_position): return pieces.PAWN
+        if self.is_knight(bitboard_position): return pieces.KNIGHT
+        if self.is_bishop(bitboard_position): return pieces.BISHOP
+        if self.is_rook(bitboard_position): return pieces.ROOK
+        if self.is_queen(bitboard_position): return pieces.QUEEN
+        if self.is_king(bitboard_position): return pieces.KING
+    
     def check_capture(self, end_bitboard_position):        
         capture = 0
         if self.is_white(end_bitboard_position): capture += pieces.WHITE
@@ -330,21 +315,21 @@ class Board:
         
         if self.is_pawn(end_bitboard_position): capture += pieces.PAWN
         elif self.is_knight(end_bitboard_position): capture += pieces.KNIGHT
-        if self.is_bishop(end_bitboard_position): capture += pieces.BISHOP
+        elif self.is_bishop(end_bitboard_position): capture += pieces.BISHOP
         elif self.is_rook(end_bitboard_position): capture += pieces.ROOK
-        if self.is_queen(end_bitboard_position): capture += pieces.QUEEN
+        elif self.is_queen(end_bitboard_position): capture += pieces.QUEEN
         elif self.is_king(end_bitboard_position): capture += pieces.KING
         
         return capture
 
     def check_kingside_castle(self, start_bitboard_position, end_bitboard_position):
-        if self.is_white(start_bitboard_position) and self.is_king(start_bitboard_position) and end_bitboard_position == 2**62 and self.white_can_kingside_castle:
+        if self.is_white(start_bitboard_position) and self.is_king(start_bitboard_position) and end_bitboard_position == 0b100000000000000000000000000000000000000000000000000000000000000 and self.white_can_kingside_castle:
                 return True
         elif self.is_black(start_bitboard_position) and self.is_king(start_bitboard_position) and end_bitboard_position == 0b1000000 and self.black_can_kingside_castle:
                 return True
     
     def check_queenside_castle(self, start_bitboard_position, end_bitboard_position):
-        if self.is_white(start_bitboard_position) and self.is_king(start_bitboard_position) and end_bitboard_position == 2**58 and self.white_can_queenside_castle:
+        if self.is_white(start_bitboard_position) and self.is_king(start_bitboard_position) and end_bitboard_position == 0b10000000000000000000000000000000000000000000000000000000000 and self.white_can_queenside_castle:
                 return True
         elif self.is_black(start_bitboard_position) and self.is_king(start_bitboard_position) and end_bitboard_position == 0b100 and self.black_can_queenside_castle:
                 return True
@@ -441,11 +426,12 @@ class Board:
     
     def get_pawn_legal_moves(self, position, bitboard_position):
         if self.is_white(bitboard_position):
-            moves = ((((bitboard_position >> 7) if DISTANCE_TO_EDGE[position][0] > 0 else 0) | ((bitboard_position >> 9) if DISTANCE_TO_EDGE[position][1] > 0 else 0)) & (self.black_pieces | self.en_passant_target)
-                     | bitboard_position >> 8 & ~(self.white_pieces | self.black_pieces))
+            moves = bitboard_position >> 8 & ~(self.white_pieces | self.black_pieces)
+
+            moves |= self.attack_tables[bitboard_position] & (self.black_pieces | self.en_passant_target)
             
             # Allow Two Squares If First Move
-            if 2**48 <= bitboard_position <= 2**55 and bitboard_position >> 8 & ~(self.white_pieces | self.black_pieces):
+            if 0b1000000000000000000000000000000000000000000000000 <= bitboard_position <= 0b10000000000000000000000000000000000000000000000000000000 and bitboard_position >> 8 & ~(self.white_pieces | self.black_pieces):
                 moves |= bitboard_position >> 16 & ~(self.white_pieces | self.black_pieces)
             
             if self.white_in_check:
@@ -454,11 +440,12 @@ class Board:
                 else:
                     moves &= self.moves_blocking_white_check
         else:
-            moves = ((((bitboard_position << 7) if DISTANCE_TO_EDGE[position][1] > 0 else 0) | ((bitboard_position << 9) if DISTANCE_TO_EDGE[position][0] > 0 else 0)) & (self.white_pieces | self.en_passant_target)
-                     | bitboard_position << 8 & ~(self.white_pieces | self.black_pieces))
+            moves = bitboard_position << 8 & ~(self.white_pieces | self.black_pieces)
+
+            moves |= self.attack_tables[bitboard_position] & (self.white_pieces | self.en_passant_target)
             
             # Allow Two Squares If First Move
-            if 2**8 <= bitboard_position <= 2**15 and bitboard_position << 8 & ~(self.white_pieces | self.black_pieces):
+            if 0b100000000 <= bitboard_position <= 0b1000000000000000 and bitboard_position << 8 & ~(self.white_pieces | self.black_pieces):
                 moves |= bitboard_position << 16 & ~(self.white_pieces | self.black_pieces)
             
             if self.black_in_check:
@@ -476,20 +463,21 @@ class Board:
         attacks = self.attack_tables[bitboard_position]
 
         if self.is_white(bitboard_position):
-            moves_bitboard = attacks & (~self.white_pieces) & (~self.black_pieces_attack_table)
+            moves_bitboard = attacks & ~(self.white_pieces | self.black_pieces_attack_table)
+
+            if not self.white_in_check:
+                if self.white_can_kingside_castle and 0b110000000000000000000000000000000000000000000000000000000000000 & (self.white_pieces | self.black_pieces | self.black_pieces_attack_table) == 0:
+                    moves_bitboard |= 0b100000000000000000000000000000000000000000000000000000000000000
+                if self.white_can_queenside_castle and (0b110000000000000000000000000000000000000000000000000000000000) & (self.white_pieces | self.black_pieces | self.black_pieces_attack_table) == 0:
+                    moves_bitboard |= 0b10000000000000000000000000000000000000000000000000000000000
         else:
-            moves_bitboard = attacks & (~self.black_pieces) & (~self.white_pieces_attack_table)
-        
-        if self.is_white(bitboard_position) and not self.white_in_check:
-            if self.white_can_kingside_castle and (2**61 | 2**62) & (self.white_pieces | self.black_pieces | self.black_pieces_attack_table) == 0:
-                moves_bitboard |= 2**62
-            if self.white_can_queenside_castle and (2**57 | 2**58 | 2**59) & (self.white_pieces | self.black_pieces | self.black_pieces_attack_table) == 0:
-                moves_bitboard |= 2**58
-        elif self.is_black(bitboard_position) and not self.black_in_check:
-            if self.black_can_kingside_castle and 0b1100000 & (self.white_pieces | self.black_pieces | self.white_pieces_attack_table) == 0:
-                moves_bitboard |= 0b1000000
-            if self.black_can_queenside_castle and 0b1110 & (self.white_pieces | self.black_pieces | self.white_pieces_attack_table) == 0:
-                moves_bitboard |= 0b100
+            moves_bitboard = attacks & ~(self.black_pieces | self.white_pieces_attack_table)
+
+            if not self.black_in_check:
+                if self.black_can_kingside_castle and 0b1100000 & (self.white_pieces | self.black_pieces | self.white_pieces_attack_table) == 0:
+                    moves_bitboard |= 0b1000000
+                if self.black_can_queenside_castle and 0b1100 & (self.white_pieces | self.black_pieces | self.white_pieces_attack_table) == 0:
+                    moves_bitboard |= 0b100
         
         return moves_bitboard
 
@@ -593,9 +581,9 @@ class Board:
                 self.pieces_attacking_black_king.append(bitboard_position)
         else:
             if DISTANCE_TO_EDGE[position][0] > 0:
-                self.attack_tables[bitboard_position] |= bitboard_position << 7
-            if DISTANCE_TO_EDGE[position][1] > 0:
                 self.attack_tables[bitboard_position] |= bitboard_position << 9
+            if DISTANCE_TO_EDGE[position][1] > 0:
+                self.attack_tables[bitboard_position] |= bitboard_position << 7
             
             if self.attack_tables[bitboard_position] & self.white_pieces & self.kings > 0:
                 self.moves_blocking_white_check = 0
@@ -731,3 +719,42 @@ class Board:
     @property
     def black_in_check(self):
         return self.black_pieces & self.kings & self.white_pieces_attack_table > 0
+    
+    def generate_zobrist_key(self):
+        # Generate Pseudorandom Numbers
+        self.zobrist_piece_numbers = [None] * 33
+        for piece in range(6):
+            self.zobrist_piece_numbers[pieces.WHITE | piece] = [random.randrange(2**64) for _ in range(64)]
+            self.zobrist_piece_numbers[pieces.BLACK | piece] = [random.randrange(2**64) for _ in range(64)]
+        
+        self.zobrist_castling_numbers = [random.randrange(2**64) for _ in range(4)]
+        self.zobrist_en_passant_numbers = [random.randrange(2**64) for _ in range(8)]
+        self.zobrist_white_to_move_number = random.randrange(2**64)
+
+        self.zobrist_key = 0
+
+        for piece in self.bitboard_to_bitboard_positions(self.white_pieces):
+            if self.is_pawn(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.WHITE | pieces.PAWN][piece[0]]
+            if self.is_knight(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.WHITE | pieces.KNIGHT][piece[0]]
+            if self.is_bishop(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.WHITE | pieces.BISHOP][piece[0]]
+            if self.is_rook(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.WHITE | pieces.ROOK][piece[0]]
+            if self.is_queen(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.WHITE | pieces.QUEEN][piece[0]]
+            if self.is_king(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.WHITE | pieces.KING][piece[0]]
+        for piece in self.bitboard_to_bitboard_positions(self.black_pieces):
+            if self.is_pawn(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.BLACK | pieces.PAWN][piece[0]]
+            if self.is_knight(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.BLACK | pieces.KNIGHT][piece[0]]
+            if self.is_bishop(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.BLACK | pieces.BISHOP][piece[0]]
+            if self.is_rook(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.BLACK | pieces.ROOK][piece[0]]
+            if self.is_queen(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.BLACK | pieces.QUEEN][piece[0]]
+            if self.is_king(piece[1]): self.zobrist_key ^= self.zobrist_piece_numbers[pieces.BLACK | pieces.KING][piece[0]]
+        
+        if self.white_can_kingside_castle: self.zobrist_key ^= self.zobrist_castling_numbers[0]
+        if self.white_can_queenside_castle: self.zobrist_key ^= self.zobrist_castling_numbers[1]
+        if self.black_can_kingside_castle: self.zobrist_key ^= self.zobrist_castling_numbers[2]
+        if self.black_can_queenside_castle: self.zobrist_key ^= self.zobrist_castling_numbers[3]
+
+        if self.is_en_passant_target:
+            self.zobrist_key ^= self.zobrist_en_passant_numbers[math.log2(self.en_passant_target) % 8]
+        
+        if self.white_move:
+            self.zobrist_key ^= self.zobrist_white_to_move_number
