@@ -1,4 +1,4 @@
-import math, random
+import math, random, time
 from Chess import openings_dictionary, pieces
 
 PAWN_VALUE = 100
@@ -76,17 +76,26 @@ KING_ENDGAME_WEIGHTS = [
 is_opening_theory = True
 current_line = openings_dictionary.openings
 
-def make_move(board, depth):
+def make_move(board):
     move = None
 
     if is_opening_theory:
         move = get_book_move(board)
     
     if move is None:
-        transposition_table = {}
+        start_time = time.perf_counter()
+        depth = 4
+        transposition_table = [{}] * (depth + 1)
         evaluation, move = search(board, depth, -1_000_000_000, 1_000_000_000, transposition_table)
-    
-    print(evaluation)
+        if time.perf_counter() - start_time < 0.5:
+            depth = 6
+            transposition_table = [{}] * (depth + 1)
+            evaluation, move = search(board, depth, -1_000_000_000, 1_000_000_000, transposition_table)
+            if time.perf_counter() - start_time < 2:
+                depth = 8
+                transposition_table = [{}] * (depth + 1)
+                evaluation, move = search(board, depth, -1_000_000_000, 1_000_000_000, transposition_table)
+        print(f"Depth: {depth}, Eval: {evaluation}")
     
     board.make_move(move)
     board.moves.append(move)
@@ -113,8 +122,8 @@ def get_book_move(board):
     return square_to_move(end_square, board)
 
 def search(board, depth, alpha, beta, transposition_table):
-    if board.zobrist_key in transposition_table:
-        return transposition_table[board.zobrist_key][0], transposition_table[board.zobrist_key][1]
+    if board.zobrist_key in transposition_table[depth]:
+        return transposition_table[depth][board.zobrist_key][0], transposition_table[depth][board.zobrist_key][1]
 
     if depth == 0:
         return search_captures(board, alpha, beta, transposition_table)
@@ -123,7 +132,7 @@ def search(board, depth, alpha, beta, transposition_table):
 
     if len(legal_moves) == 0:
         if board.white_in_check or board.black_in_check:
-            return -1_000_000_000, None
+            return -1_000_000_000 * depth, None
         else:
             return 0, None
 
@@ -136,12 +145,12 @@ def search(board, depth, alpha, beta, transposition_table):
         move_evaluation, _ = search(board, depth-1, -beta, -alpha, transposition_table)
         move_evaluation *= -1
         board.undo_move(move)
-        transposition_table[board.zobrist_key] = (move_evaluation, move)
         if move_evaluation >= beta:
             return beta, move
         if move_evaluation > alpha:
             best_move = move
             alpha = move_evaluation
+            transposition_table[depth][board.zobrist_key] = (move_evaluation, move)
     
     return alpha, best_move
 
@@ -205,7 +214,7 @@ def evaluate(board):
                 evaluation += QUEEN_WEIGHTS[i] * 10
             elif board.is_king(bitboard_position):
                 if len([j for j in board.bitboard_to_bitboard_positions(board.black_pieces & (board.knights | board.bishops | board.rooks | board.queens))]) > 3:
-                    evaluation += KING_EARLY_WEIGHTS[i] * 10
+                    evaluation += KING_EARLY_WEIGHTS[i] * 20
                 else:
                     evaluation += KING_ENDGAME_WEIGHTS[i] * 10
         else:
@@ -219,7 +228,7 @@ def evaluate(board):
                 evaluation -= QUEEN_WEIGHTS[i] * 10
             elif board.is_king(bitboard_position):
                 if len([j for j in board.bitboard_to_bitboard_positions(board.white_pieces & (board.knights | board.bishops | board.rooks | board.queens))]) > 3:
-                    evaluation += KING_EARLY_WEIGHTS[63-i] * 10
+                    evaluation += KING_EARLY_WEIGHTS[63-i] * 20
                 else:
                     evaluation += KING_ENDGAME_WEIGHTS[63-i] * 10
 

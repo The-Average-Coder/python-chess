@@ -10,9 +10,8 @@ class InputHandler:
     
     def handle_input(self, pygame_events, renderer, board):
         legal_moves = board.get_legal_moves()
-        if len(legal_moves) > 0 and board.white_move:
-            chess_bot.make_move(board, 8)
-            print(board.zobrist_key)
+        if len(legal_moves) > 0 and not board.white_move:
+            chess_bot.make_move(board)
 
         for event in pygame_events:
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -62,7 +61,6 @@ class InputHandler:
 
         board.make_move(move)
         board.moves.append(move)
-        print(board.zobrist_key)
 
         if len(board.get_legal_moves()) == 0:
             if board.white_in_check or board.black_in_check:
