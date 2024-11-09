@@ -83,7 +83,10 @@ def make_move(board, depth):
         move = get_book_move(board)
     
     if move is None:
-        _, move = search(board, depth, -1_000_000_000, 1_000_000_000)
+        transposition_table = {}
+        evaluation, move = search(board, depth, -1_000_000_000, 1_000_000_000, transposition_table)
+    
+    print(evaluation)
     
     board.make_move(move)
     board.moves.append(move)
@@ -109,10 +112,12 @@ def get_book_move(board):
 
     return square_to_move(end_square, board)
 
-def search(board, depth, alpha, beta):
+def search(board, depth, alpha, beta, transposition_table):
+    if board.zobrist_key in transposition_table:
+        return transposition_table[board.zobrist_key][0], transposition_table[board.zobrist_key][1]
 
     if depth == 0:
-        return search_captures(board, alpha, beta)
+        return search_captures(board, alpha, beta, transposition_table)
 
     legal_moves = board.get_legal_moves()
 
@@ -128,9 +133,10 @@ def search(board, depth, alpha, beta):
 
     for move in legal_moves:
         board.make_move(move)
-        move_evaluation, _ = search(board, depth-1, -beta, -alpha)
+        move_evaluation, _ = search(board, depth-1, -beta, -alpha, transposition_table)
         move_evaluation *= -1
         board.undo_move(move)
+        transposition_table[board.zobrist_key] = (move_evaluation, move)
         if move_evaluation >= beta:
             return beta, move
         if move_evaluation > alpha:
@@ -139,7 +145,7 @@ def search(board, depth, alpha, beta):
     
     return alpha, best_move
 
-def search_captures(board, alpha, beta):
+def search_captures(board, alpha, beta, transposition_table):
     evaluation = evaluate(board)
     if (evaluation >= beta):
         return beta, None
@@ -164,7 +170,7 @@ def search_captures(board, alpha, beta):
 
     for move in legal_captures:
         board.make_move(move)
-        move_evaluation, _ = search_captures(board, -beta, -alpha)
+        move_evaluation, _ = search_captures(board, -beta, -alpha, transposition_table)
         move_evaluation *= -1
         board.undo_move(move)
         if move_evaluation >= beta:

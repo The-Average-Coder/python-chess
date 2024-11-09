@@ -11,6 +11,7 @@ STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 #STARTING_FEN = 'r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 '
 
 #STARTING_FEN = '6QR/8/3p1kN1/1P5P/3N1r2/1b4P1/3r4/2K2b2 b - - 13 10'
+STARTING_FEN = '4k3/5ppp/4p3/1p6/8/PP5P/4KPP1/8 w - - 0 1'
 
 SLIDING_PIECE_DIRECTION_OFFSETS = [ 1, -1, 8, -8, 7, -7, 9, -9 ]
 
@@ -74,7 +75,7 @@ class Board:
         self.moves = []
 
         self.generate_attack_tables()
-        #self.generate_zobrist_key()
+        self.generate_zobrist_key()
 
     def fen_is_valid(self, FEN):
         return True
@@ -242,10 +243,14 @@ class Board:
                 self.update_piece_position(0b1, 0b1000)
 
         self.update_attack_tables(move)
+        self.update_zobrist_key(move)
 
         self.white_move = not self.white_move
     
     def undo_move(self, move):
+
+        self.update_zobrist_key(move)
+
         if move.is_promotion:
             if move.is_promotion_to_knight:
                 self.knights -= move.end_bitboard_position
@@ -723,7 +728,7 @@ class Board:
     def generate_zobrist_key(self):
         # Generate Pseudorandom Numbers
         self.zobrist_piece_numbers = [None] * 33
-        for piece in range(6):
+        for piece in range(1, 7):
             self.zobrist_piece_numbers[pieces.WHITE | piece] = [random.randrange(2**64) for _ in range(64)]
             self.zobrist_piece_numbers[pieces.BLACK | piece] = [random.randrange(2**64) for _ in range(64)]
         
@@ -758,3 +763,54 @@ class Board:
         
         if self.white_move:
             self.zobrist_key ^= self.zobrist_white_to_move_number
+    
+    def update_zobrist_key(self, move):
+        piece_color = pieces.WHITE if self.is_white(move.end_bitboard_position) else pieces.BLACK
+
+        if self.is_pawn(move.end_bitboard_position):
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.PAWN][int(math.log2(move.start_bitboard_position))]
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.PAWN][int(math.log2(move.end_bitboard_position))]
+        elif self.is_knight(move.end_bitboard_position):
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.KNIGHT][int(math.log2(move.start_bitboard_position))]
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.KNIGHT][int(math.log2(move.end_bitboard_position))]
+        elif self.is_bishop(move.end_bitboard_position):
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.BISHOP][int(math.log2(move.start_bitboard_position))]
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.BISHOP][int(math.log2(move.end_bitboard_position))]
+        elif self.is_rook(move.end_bitboard_position):
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.ROOK][int(math.log2(move.start_bitboard_position))]
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.ROOK][int(math.log2(move.end_bitboard_position))]
+        elif self.is_queen(move.end_bitboard_position):
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.QUEEN][int(math.log2(move.start_bitboard_position))]
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.QUEEN][int(math.log2(move.end_bitboard_position))]
+        elif self.is_king(move.end_bitboard_position):
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.KING][int(math.log2(move.start_bitboard_position))]
+            self.zobrist_key ^= self.zobrist_piece_numbers[piece_color | pieces.KING][int(math.log2(move.end_bitboard_position))]
+        
+        if move.is_capture:
+            if move.captured_pawn:
+                self.zobrist_key ^= self.zobrist_piece_numbers[(0b11000 ^ piece_color) | pieces.PAWN][int(math.log2(move.end_bitboard_position))]
+            elif move.captured_knight:
+                self.zobrist_key ^= self.zobrist_piece_numbers[(0b11000 ^ piece_color) | pieces.KNIGHT][int(math.log2(move.end_bitboard_position))]
+            elif move.captured_bishop:
+                self.zobrist_key ^= self.zobrist_piece_numbers[(0b11000 ^ piece_color) | pieces.BISHOP][int(math.log2(move.end_bitboard_position))]
+            elif move.captured_rook:
+                self.zobrist_key ^= self.zobrist_piece_numbers[(0b11000 ^ piece_color) | pieces.ROOK][int(math.log2(move.end_bitboard_position))]
+            elif move.captured_queen:
+                self.zobrist_key ^= self.zobrist_piece_numbers[(0b11000 ^ piece_color) | pieces.QUEEN][int(math.log2(move.end_bitboard_position))]
+
+        if move.previous_castling_rules & 0b10000 != self.white_can_kingside_castle:
+            self.zobrist_key ^= self.zobrist_castling_numbers[0]
+        if move.previous_castling_rules & 0b1000 != self.white_can_queenside_castle:
+            self.zobrist_key ^= self.zobrist_castling_numbers[1]
+        if move.previous_castling_rules & 0b100 != self.black_can_kingside_castle:
+            self.zobrist_key ^= self.zobrist_castling_numbers[2]
+        if move.previous_castling_rules & 0b10 != self.black_can_queenside_castle:
+            self.zobrist_key ^= self.zobrist_castling_numbers[3]
+
+        if move.previous_en_passant_target != 0:
+            self.zobrist_key ^= self.zobrist_en_passant_numbers[int(math.log2(move.previous_en_passant_target) % 8)]
+        if self.is_en_passant_target:
+            self.zobrist_key ^= self.zobrist_en_passant_numbers[int(math.log2(self.en_passant_target) % 8)]
+
+
+        self.zobrist_key ^= self.zobrist_white_to_move_number
