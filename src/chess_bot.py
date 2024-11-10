@@ -122,8 +122,8 @@ def get_book_move(board):
     return square_to_move(end_square, board)
 
 def search(board, depth, alpha, beta, transposition_table):
-    if board.zobrist_key in transposition_table[depth]:
-        return transposition_table[depth][board.zobrist_key][0], transposition_table[depth][board.zobrist_key][1]
+    #if board.zobrist_key in transposition_table[depth]:
+    #    return transposition_table[depth][board.zobrist_key][0], transposition_table[depth][board.zobrist_key][1]
 
     if depth == 0:
         return search_captures(board, alpha, beta, transposition_table)
@@ -150,7 +150,10 @@ def search(board, depth, alpha, beta, transposition_table):
         if move_evaluation > alpha:
             best_move = move
             alpha = move_evaluation
-            transposition_table[depth][board.zobrist_key] = (move_evaluation, move)
+            if board.zobrist_key in transposition_table[depth] and transposition_table[depth][board.zobrist_key][0] != move_evaluation:
+                print("TT Error")
+    
+    transposition_table[depth][board.zobrist_key] = (alpha, best_move)
     
     return alpha, best_move
 
