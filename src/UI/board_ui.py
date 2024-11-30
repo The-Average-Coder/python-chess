@@ -1,5 +1,8 @@
 import pygame
 
+from UI.ui_element import UIElement
+from Chess.Board.move_generator import MoveGenerator
+
 chess_board = pygame.image.load("./src/UI/images/chess_board.png")
 
 white_pawn = pygame.image.load("./src/UI/images/white_pawn.png")
@@ -19,28 +22,28 @@ black_king = pygame.image.load("./src/UI/images/black_king.png")
 move_overlay = pygame.image.load("./src/UI/images/move_overlay.png")
 previous_move_overlay = pygame.image.load("./src/UI/images/previous_move_overlay.png")
 
-class BoardUI():
-    def __init__(self, position):
-        self.chess_board_position = position
+class BoardUI(UIElement):
+    def __init__(self):
         self.selected_piece = -1
+        self.board_position = (0, 0)
     
-    def render(self, screen, board):
-        screen.blit(chess_board, self.chess_board_position)
+    def render(self, screen, board, board_position):
+        self.board_position = board_position
+        screen.blit(chess_board, board_position)
 
         last_move = board.moves[-1] if len(board.moves) > 0 else None
+        if last_move:
+            screen.blit(previous_move_overlay, self.get_screen_position_from_square(last_move.start_position))
+            screen.blit(previous_move_overlay, self.get_screen_position_from_square(last_move.end_position))
 
         for position in range(64):
-            if last_move:
-                if 2**position & (last_move.start_bitboard_position | last_move.end_bitboard_position):
-                    screen.blit(previous_move_overlay, self.get_screen_position_from_square(position))
-
             # Piece being dragged is rendered on top of other pieces
             if position == self.selected_piece:
                 continue
 
             if self.selected_piece >= 0:
                 for move in self.legal_moves:
-                    if move.end_bitboard_position == board.get_bitboard_position_from_index(position):
+                    if move.end_position == position:
                         screen.blit(move_overlay, self.get_screen_position_from_square(position))
                         break
 
@@ -60,28 +63,25 @@ class BoardUI():
     
     # Check if a position on the window is a square on the board
     def get_square_from_screen_position(self, position):
-        if position[0] < self.chess_board_position[0] or position[0] > self.chess_board_position[0] + 800:
+        if position[0] < self.board_position[0] or position[0] > self.board_position[0] + 800:
             return -1
-        if position[1] < self.chess_board_position[1] or position[1] > self.chess_board_position[1] + 800:
+        if position[1] < self.board_position[1] or position[1] > self.board_position[1] + 800:
             return -1
         
-        square_x = (position[0] - self.chess_board_position[0]) // 100
-        square_y = (position[1] - self.chess_board_position[1]) // 100
+        square_x = (position[0] - self.board_position[0]) // 100
+        square_y = (position[1] - self.board_position[1]) // 100
 
         return square_y * 8 + square_x
     
     def get_screen_position_from_square(self, position):
-        screen_x = self.chess_board_position[0] + 100 * (position % 8)
-        screen_y = self.chess_board_position[1] + 100 * (position // 8)
+        screen_x = self.board_position[0] + 100 * (position % 8)
+        screen_y = self.board_position[1] + 100 * (position // 8)
 
         return (screen_x, screen_y)
     
-    def set_selected_piece(self, square, board):
+    def set_selected_piece(self, square, legal_moves, board):
         self.selected_piece = square
-        if square == -1:
-            self.legal_moves = []
-            return
-        self.legal_moves = board.get_piece_legal_moves(self.selected_piece, board.get_bitboard_position_from_index(self.selected_piece))
+        self.legal_moves = legal_moves
 
 def get_piece_image(position, board):
     bitboard_position = board.get_bitboard_position_from_index(position)

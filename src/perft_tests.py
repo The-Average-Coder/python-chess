@@ -1,10 +1,12 @@
 import time, math
 
-from Chess.board import Board
+from Chess.Board.board import Board
+from Chess.Board.move_generator import MoveGenerator
 
 def search(board: Board, depth):
 
-    legal_moves = board.get_legal_moves()
+    move_generator = MoveGenerator(board)
+    legal_moves = move_generator.get_legal_moves()
 
     if depth == 1:
         return len(legal_moves)
@@ -16,7 +18,7 @@ def search(board: Board, depth):
         board.make_move(move)
         new_positions = search(board, depth-1)
         num_positions += new_positions
-        #if depth == 2:
+        #if depth == 4:
         #    print(f"{bitboard_position_to_human_position(move.start_bitboard_position)}{bitboard_position_to_human_position(move.end_bitboard_position)}: {new_positions}")
         board.undo_move(move)
     
@@ -38,7 +40,7 @@ def run_perft_test(FEN, depth, expected_num_positions_list):
 
 def run_perft_tests():
     print("-------------------------------- Test 1 --------------------------------")
-    run_perft_test('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 ', 4, [20, 400, 8902, 197281, 4865609])
+    run_perft_test('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1', 4, [20, 400, 8902, 197281, 4865609])
     print("-------------------------------- Test 2 --------------------------------")
     run_perft_test('rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8 ', 4, [44, 1486, 62379, 2103487, 89941194])
     print("-------------------------------- Test 3 --------------------------------")

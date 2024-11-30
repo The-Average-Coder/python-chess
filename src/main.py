@@ -1,5 +1,4 @@
-import pygame
-import ctypes
+import pygame, sys, ctypes
 
 from game import Game
 
@@ -19,10 +18,12 @@ def main():
                 running = False
         
         game.handle_input(events)
+        game.simulate()
         game.render()
 
 
     pygame.quit()
+    sys.exit()
 
 if __name__ == '__main__':
     main()
