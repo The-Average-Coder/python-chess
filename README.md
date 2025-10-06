@@ -1,2 +1,2 @@
 # chess
-A chess program written in pyhon.
+A chess program written in python.
